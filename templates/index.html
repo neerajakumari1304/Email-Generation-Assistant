@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Generation Assistant</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            padding: 30px 20px;
+        }
+
+        .container {
+            max-width: 750px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1a1a2e;
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.95rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+        }
+
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            margin-bottom: 18px;
+            transition: border 0.2s;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #4361ee;
+        }
+
+        textarea { height: 90px; resize: vertical; }
+
+        .row { display: flex; gap: 16px; }
+        .row > div { flex: 1; }
+
+        button {
+            width: 100%;
+            padding: 13px;
+            background: #4361ee;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover { background: #3451d1; }
+
+        .error {
+            background: #fff3f3;
+            border: 1px solid #f5c6c6;
+            color: #c0392b;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .email-output {
+            white-space: pre-wrap;
+            background: #f8f9ff;
+            border: 1px solid #e0e4ff;
+            border-radius: 8px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            color: #222;
+        }
+
+        .scores {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .score-card {
+            background: #f0f4ff;
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .score-card .label {
+            font-size: 0.78rem;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .score-card .value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #4361ee;
+        }
+
+        .score-card.avg .value { color: #2d6a4f; }
+
+        h2 { color: #1a1a2e; margin-bottom: 16px; font-size: 1.1rem; }
+        h3 { color: #333; margin-bottom: 12px; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Email Generation Assistant</h1>
+    <p class="subtitle">Powered by LLaMA via Groq | Two prompting strategies compared</p>
+
+    <div class="card">
+        <h2>Generate an Email</h2>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="/generate">
+
+            <label>Intent</label>
+            <input type="text" name="intent"
+                placeholder="e.g. Follow up after job interview"
+                value="{{ intent or '' }}" required>
+
+            <label>Key Facts <span style="font-weight:400;color:#888">(comma separated)</span></label>
+            <textarea name="facts"
+                placeholder="e.g. Interviewed on Monday, Applied for Software Engineer role, Interviewer was Mr. Sharma">{{ facts_raw or '' }}</textarea>
+
+            <div class="row">
+                <div>
+                    <label>Tone</label>
+                    <select name="tone">
+                        {% for t in ['formal','casual','polite','urgent','empathetic','warm'] %}
+                        <option value="{{ t }}" {% if tone == t %}selected{% endif %}>
+                            {{ t.capitalize() }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label>Strategy</label>
+                    <select name="strategy">
+                        <option value="A" {% if strategy == 'A' or not strategy %}selected{% endif %}>
+                            A — Few-Shot + Role-Playing (llama-3.1-8b)
+                        </option>
+                        <option value="B" {% if strategy == 'B' %}selected{% endif %}>
+                            B — Zero-Shot (llama3-70b)
+                        </option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit">Generate Email</button>
+        </form>
+    </div>
+
+    {% if email %}
+    <div class="card">
+        <h2>Generated Email</h2>
+        <div class="email-output">{{ email }}</div>
+    </div>
+
+    <div class="card">
+        <h3>Evaluation Scores (1–5 scale)</h3>
+        <div class="scores">
+            <div class="score-card">
+                <div class="label">Fact Recall</div>
+                <div class="value">{{ scores.fact_recall_score }}</div>
+            </div>
+            <div class="score-card">
+                <div class="label">Tone Accuracy</div>
+                <div class="value">{{ scores.tone_accuracy_score }}</div>
+            </div>
+            <div class="score-card">
+                <div class="label">Clarity & Structure</div>
+                <div class="value">{{ scores.clarity_structure_score }}</div>
+            </div>
+            <div class="score-card avg">
+                <div class="label">Average Score</div>
+                <div class="value">{{ scores.average_score }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+</body>
+</html>
